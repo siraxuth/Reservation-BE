@@ -5,14 +5,14 @@
   "buildCommand": "bunx prisma generate",
   "outputDirectory": null,
   "functions": {
-    "src/index.ts": {
+    "api/index.ts": {
       "runtime": "@vercel/bun@1.0.0"
     }
   },
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": "/src/index.ts"
+      "destination": "/api/index.ts"
     }
   ]
 }
