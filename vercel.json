@@ -1,18 +1,12 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
-  "installCommand": "bun install",
-  "buildCommand": "bunx prisma generate",
-  "outputDirectory": null,
-  "functions": {
-    "api/index.ts": {
-      "runtime": "@vercel/bun@1.0.0"
-    }
-  },
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/api/index.ts"
-    }
-  ]
+    "$schema": "https://openapi.vercel.sh/vercel.json",
+    "bunVersion": "1.3.2",
+    "buildCommand": "bun run build",
+    "outputDirectory": "api",
+    "rewrites": [
+        {
+            "source": "/(.*)",
+            "destination": "/api"
+        }
+    ]
 }

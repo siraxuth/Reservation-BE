@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
-    "build": "bunx prisma generate",
+    "build": "tsdown src/index.ts -d api --dts",
+    "generate": "bunx prisma generate",
     "db:generate": "bunx prisma generate",
     "db:push": "bunx prisma db push",
     "db:migrate": "bunx prisma migrate dev",
@@ -34,6 +35,7 @@
     "nanoid": "^5.0.6",
     "nodemailer": "^7.0.11",
     "pg": "^8.16.3",
+    "tsdown": "^0.18.2",
     "zod": "^3.22.4"
   },
   "devDependencies": {
