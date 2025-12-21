@@ -1,0 +1,385 @@
+// Prisma Schema for Food Queue Reservation System
+// Database: Neon PostgreSQL (Serverless)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ===========================================
+// Enums
+// ===========================================
+
+enum Role {
+  CUSTOMER
+  VENDOR
+  ADMIN
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentType {
+  CASH
+  BANK_TRANSFER
+}
+
+enum Period {
+  MORNING
+  AFTERNOON
+}
+
+enum APIKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum UploadType {
+  AVATAR
+  VENDOR_IMAGE
+  MENU_IMAGE
+  BANNER
+  REVIEW_IMAGE
+}
+
+// ===========================================
+// User & Authentication
+// ===========================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  password      String?
+  phone         String?
+  avatar        String?
+  role          Role      @default(CUSTOMER)
+  isActive      Boolean   @default(true)
+  emailVerified Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Account lockout fields
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  lastFailedLogin     DateTime?
+
+  // Email verification
+  emailVerificationToken   String?
+  emailVerificationExpires DateTime?
+
+  // Password reset
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
+
+  // Relations
+  sessions      Session[]
+  accounts      Account[]
+  vendor        Vendor?
+  reservations  Reservation[]
+  reviews       Review[]
+  apiKeys       APIKey[]
+  logs          AuditLog[]
+  uploads       Upload[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String  // oauth, email
+  provider          String  // google, credentials
+  providerAccountId String
+  refreshToken      String? @db.Text
+  accessToken       String? @db.Text
+  expiresAt         Int?
+  tokenType         String?
+  scope             String?
+  idToken           String? @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  expiresAt    DateTime
+  userAgent    String?
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+  lastActiveAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+// ===========================================
+// Vendor & Menu
+// ===========================================
+
+model Vendor {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  name        String
+  description String?  @db.Text
+  image       String?
+  rating      Float    @default(0)
+  totalOrders Int      @default(0)
+  isOpen      Boolean  @default(true)
+  categories  String[] // Array of category names
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  menuItems    MenuItem[]
+  reservations Reservation[]
+  reviews      Review[]
+  timeSlots    TimeSlot[]
+
+  @@index([userId])
+  @@index([isOpen])
+}
+
+model MenuItem {
+  id              String   @id @default(cuid())
+  vendorId        String
+  name            String
+  description     String?  @db.Text
+  price           Float
+  image           String?
+  category        String
+  isAvailable     Boolean  @default(true)
+  preparationTime Int      @default(10) // minutes
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  vendor           Vendor            @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  reservationItems ReservationItem[]
+
+  @@index([vendorId])
+  @@index([category])
+  @@index([isAvailable])
+}
+
+model TimeSlot {
+  id        String   @id @default(cuid())
+  vendorId  String?  // null = global time slot
+  label     String
+  startTime String   // HH:mm format
+  endTime   String   // HH:mm format
+  period    Period
+  isActive  Boolean  @default(true)
+  maxOrders Int      @default(50)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  vendor       Vendor?       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+
+  @@index([vendorId])
+  @@index([period])
+}
+
+// ===========================================
+// Reservation System
+// ===========================================
+
+model Reservation {
+  id              String            @id @default(cuid())
+  customerId      String
+  vendorId        String
+  timeSlotId      String
+  customerName    String
+  customerContact String            // email or phone
+  paymentMethod   PaymentType
+  status          ReservationStatus @default(PENDING)
+  totalAmount     Float
+  queueNumber     Int
+  notes           String?           @db.Text
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  confirmedAt     DateTime?
+  completedAt     DateTime?
+
+  // Relations
+  customer User             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  vendor   Vendor           @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  timeSlot TimeSlot         @relation(fields: [timeSlotId], references: [id])
+  items    ReservationItem[]
+
+  @@index([customerId])
+  @@index([vendorId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([queueNumber])
+}
+
+model ReservationItem {
+  id            String @id @default(cuid())
+  reservationId String
+  menuItemId    String
+  name          String
+  price         Float
+  quantity      Int
+
+  // Relations
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  menuItem    MenuItem    @relation(fields: [menuItemId], references: [id])
+
+  @@index([reservationId])
+  @@index([menuItemId])
+}
+
+// ===========================================
+// Reviews
+// ===========================================
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  vendorId  String
+  rating    Int      // 1-5
+  comment   String?  @db.Text
+  images    String[] // Array of image URLs
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([vendorId])
+  @@index([rating])
+}
+
+// ===========================================
+// API Key System
+// ===========================================
+
+model APIKey {
+  id          String       @id @default(cuid())
+  userId      String
+  name        String       // Descriptive name
+  key         String       @unique
+  keyPrefix   String       // First 8 chars for display
+  permissions String[]     // Array of permission strings
+  status      APIKeyStatus @default(ACTIVE)
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs AuditLog[]
+
+  @@index([key])
+  @@index([userId])
+  @@index([status])
+}
+
+// ===========================================
+// File Uploads
+// ===========================================
+
+model Upload {
+  id           String     @id @default(cuid())
+  userId       String
+  type         UploadType
+  url          String
+  publicId     String     // Cloudinary public ID
+  format       String     // jpg, png, etc.
+  width        Int?
+  height       Int?
+  bytes        Int?
+  originalName String?
+  createdAt    DateTime   @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([publicId])
+}
+
+// ===========================================
+// Audit Logging
+// ===========================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  apiKeyId  String?
+  action    String   // CREATE, UPDATE, DELETE, LOGIN, etc.
+  entity    String   // User, Vendor, Reservation, etc.
+  entityId  String?
+  metadata  Json?    // Additional data
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  apiKey APIKey? @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([apiKeyId])
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
+}
+
+// ===========================================
+// Payment Methods (Reference Data)
+// ===========================================
+
+model PaymentMethod {
+  id          String      @id @default(cuid())
+  type        PaymentType @unique
+  label       String
+  description String?
+  icon        String?
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+// ===========================================
+// System Settings
+// ===========================================
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+}

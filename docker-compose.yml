@@ -1,0 +1,98 @@
+# ===================================
+# Food Queue Reservation System
+# Docker Compose Configuration
+# ===================================
+
+version: '3.8'
+
+services:
+  # Backend API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reservation-api
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      # Server
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=8080
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      # Database
+      - DATABASE_URL=${DATABASE_URL}
+      # JWT
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
+      # Google OAuth
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
+      # Cloudinary
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+      # Frontend URL
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      # API Key
+      - API_KEY_PREFIX=${API_KEY_PREFIX:-rk_}
+      - API_KEY_LENGTH=${API_KEY_LENGTH:-32}
+      # Rate Limiting
+      - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-60000}
+      - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS:-100}
+      # Account Security
+      - ACCOUNT_LOCKOUT_THRESHOLD=${ACCOUNT_LOCKOUT_THRESHOLD:-5}
+      - ACCOUNT_LOCKOUT_DURATION_MINUTES=${ACCOUNT_LOCKOUT_DURATION_MINUTES:-30}
+      # Token Expiry
+      - PASSWORD_RESET_TOKEN_EXPIRES_HOURS=${PASSWORD_RESET_TOKEN_EXPIRES_HOURS:-1}
+      - EMAIL_VERIFICATION_TOKEN_EXPIRES_HOURS=${EMAIL_VERIFICATION_TOKEN_EXPIRES_HOURS:-24}
+      # SMTP Email
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
+      - SMTP_SECURE=${SMTP_SECURE:-false}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - reservation-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Local PostgreSQL for development
+  # Uncomment if you want to use local DB instead of Neon
+  # db:
+  #   image: postgres:16-alpine
+  #   container_name: reservation-db
+  #   restart: unless-stopped
+  #   ports:
+  #     - "5432:5432"
+  #   environment:
+  #     - POSTGRES_USER=postgres
+  #     - POSTGRES_PASSWORD=postgres
+  #     - POSTGRES_DB=reservation
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - reservation-network
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U postgres"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+networks:
+  reservation-network:
+    driver: bridge
+
+# volumes:
+#   postgres_data:
