@@ -92,20 +92,20 @@ const app = new Elysia()
   )
 
   // logging
-  .use(
-    logixlysia({
-      config: {
-        showStartupMessage: true,
-        startupMessageFormat: "banner",
-        timestamp: {
-          translateTime: "yyyy-mm-dd HH:MM:ss",
-        },
-        ip: true,
-        customLogFormat:
-          "🦊 {now} {level} {duration} {method} {pathname} {status}",
-      },
-    })
-  )
+  // .use(
+  //   logixlysia({
+  //     config: {
+  //       showStartupMessage: true,
+  //       startupMessageFormat: "banner",
+  //       timestamp: {
+  //         translateTime: "yyyy-mm-dd HH:MM:ss",
+  //       },
+  //       ip: true,
+  //       customLogFormat:
+  //         "🦊 {now} {level} {duration} {method} {pathname} {status}",
+  //     },
+  //   })
+  // )
 
   // Openapi documentation
   .use(openapi({ path: "/docs" }))
