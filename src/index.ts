@@ -34,7 +34,19 @@ import {
 
 const PORT = Number(process.env.PORT) || 3002;
 const NODE_ENV = process.env.NODE_ENV || "development";
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
+
+// Production frontend URLs (no trailing slash)
+const PRODUCTION_ORIGINS = [
+  "https://is.reservation.siraxuth.xyz",
+  "https://reservation.siraxuth.xyz",
+  process.env.FRONTEND_URL,
+].filter(Boolean) as string[];
+
+const DEV_ORIGINS = [
+  "http://localhost:3000",
+  "http://localhost:3001",
+  `http://localhost:${PORT}`,
+];
 
 // Create Elysia app
 const app = new Elysia()
@@ -76,10 +88,7 @@ const app = new Elysia()
   // CORS
   .use(
     cors({
-      origin:
-        NODE_ENV === "production"
-          ? FRONTEND_URL
-          : ["http://localhost:3000", `http://localhost:${PORT}`],
+      origin: NODE_ENV === "production" ? PRODUCTION_ORIGINS : DEV_ORIGINS,
       credentials: true,
       allowedHeaders: [
         "Content-Type",
