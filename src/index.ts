@@ -35,18 +35,18 @@ import {
 const PORT = Number(process.env.PORT) || 3002;
 const NODE_ENV = process.env.NODE_ENV || "development";
 
-// Production frontend URLs (no trailing slash)
-const PRODUCTION_ORIGINS = [
+// All allowed origins (both production and development)
+const ALLOWED_ORIGINS = [
+  // Production
   "https://is.reservation.siraxuth.xyz",
   "https://reservation.siraxuth.xyz",
-  process.env.FRONTEND_URL,
-].filter(Boolean) as string[];
-
-const DEV_ORIGINS = [
+  // Development
   "http://localhost:3000",
   "http://localhost:3001",
   `http://localhost:${PORT}`,
-];
+  // Custom from env
+  process.env.FRONTEND_URL,
+].filter(Boolean) as string[];
 
 // Create Elysia app
 const app = new Elysia()
@@ -85,18 +85,10 @@ const app = new Elysia()
     set.status = getErrorStatusCode(error);
     return formatErrorResponse(error);
   })
-  // CORS
+  // CORS - Allow all origins in the list regardless of NODE_ENV
   .use(
     cors({
-      origin: (request) => {
-        const origin = request.headers.get("origin");
-        if (!origin) return false;
-
-        const allowList =
-          NODE_ENV === "production" ? PRODUCTION_ORIGINS : DEV_ORIGINS;
-
-        return allowList.includes(origin);
-      },
+      origin: ALLOWED_ORIGINS,
       credentials: true,
       allowedHeaders: [
         "Content-Type",
