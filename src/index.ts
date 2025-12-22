@@ -88,7 +88,15 @@ const app = new Elysia()
   // CORS
   .use(
     cors({
-      origin: NODE_ENV === "production" ? PRODUCTION_ORIGINS : DEV_ORIGINS,
+      origin: (request) => {
+        const origin = request.headers.get("origin");
+        if (!origin) return false;
+
+        const allowList =
+          NODE_ENV === "production" ? PRODUCTION_ORIGINS : DEV_ORIGINS;
+
+        return allowList.includes(origin);
+      },
       credentials: true,
       allowedHeaders: [
         "Content-Type",
