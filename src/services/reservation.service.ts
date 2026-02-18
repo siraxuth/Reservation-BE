@@ -1,16 +1,27 @@
 // Reservation Service
-import { prisma } from '../config/database';
-import { NotFoundError, ForbiddenError, BadRequestError } from '../utils/errors';
-import { parsePagination, createPaginationMeta } from '../utils/response';
-import type { CreateReservationInput, PaginationInput } from '../utils/validation';
-import type { Role, ReservationStatus } from '@prisma/client';
+import { prisma } from "../config/database";
+import {
+  sendReservationStatusNotification,
+  sendNewReservationNotification,
+} from "./push.service";
+import {
+  NotFoundError,
+  ForbiddenError,
+  BadRequestError,
+} from "../utils/errors";
+import { parsePagination, createPaginationMeta } from "../utils/response";
+import type {
+  CreateReservationInput,
+  PaginationInput,
+} from "../utils/validation";
+import type { Role, ReservationStatus } from "@prisma/client";
 import {
   sendOrderConfirmedEmail,
   sendOrderPreparingEmail,
   sendOrderReadyEmail,
   sendOrderCompletedEmail,
   sendOrderCancelledEmail,
-} from './email.service';
+} from "./email.service";
 
 export interface ReservationResponse {
   id: string;
@@ -66,7 +77,7 @@ async function generateQueueNumber(vendorId: string): Promise<number> {
       vendorId,
       createdAt: { gte: today },
     },
-    orderBy: { queueNumber: 'desc' },
+    orderBy: { queueNumber: "desc" },
   });
 
   return (lastReservation?.queueNumber || 0) + 1;
@@ -77,7 +88,7 @@ async function generateQueueNumber(vendorId: string): Promise<number> {
  */
 export async function createReservation(
   customerId: string,
-  input: CreateReservationInput
+  input: CreateReservationInput,
 ): Promise<ReservationResponse> {
   // Verify vendor exists and is open
   const vendor = await prisma.vendor.findUnique({
@@ -85,11 +96,11 @@ export async function createReservation(
   });
 
   if (!vendor) {
-    throw new NotFoundError('Vendor');
+    throw new NotFoundError("Vendor");
   }
 
   if (!vendor.isOpen) {
-    throw new BadRequestError('This vendor is currently closed');
+    throw new BadRequestError("This vendor is currently closed");
   }
 
   // Verify time slot exists
@@ -98,7 +109,7 @@ export async function createReservation(
   });
 
   if (!timeSlot) {
-    throw new NotFoundError('Time slot');
+    throw new NotFoundError("Time slot");
   }
 
   // Get menu items and calculate total
@@ -111,14 +122,14 @@ export async function createReservation(
   });
 
   if (menuItems.length !== menuItemIds.length) {
-    throw new BadRequestError('Some menu items are not found or not available');
+    throw new BadRequestError("Some menu items are not found or not available");
   }
 
   // Check all items are available
   const unavailableItems = menuItems.filter((item) => !item.isAvailable);
   if (unavailableItems.length > 0) {
     throw new BadRequestError(
-      `Some items are not available: ${unavailableItems.map((i) => i.name).join(', ')}`
+      `Some items are not available: ${unavailableItems.map((i) => i.name).join(", ")}`,
     );
   }
 
@@ -190,6 +201,19 @@ export async function createReservation(
     data: { totalOrders: { increment: 1 } },
   });
 
+  // Send push notification to vendor about new order (fire and forget)
+  if (vendor.userId) {
+    sendNewReservationNotification(
+      vendor.userId,
+      reservation.queueNumber,
+      reservation.customerName,
+      reservation.totalAmount,
+      reservation.id,
+    ).catch((error: unknown) => {
+      console.error(`[Push] Failed to notify vendor:`, error);
+    });
+  }
+
   return reservation;
 }
 
@@ -199,7 +223,7 @@ export async function createReservation(
 export async function getReservationById(
   reservationId: string,
   userId: string,
-  userRole: Role
+  userRole: Role,
 ): Promise<ReservationResponse> {
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
@@ -233,15 +257,15 @@ export async function getReservationById(
   });
 
   if (!reservation) {
-    throw new NotFoundError('Reservation');
+    throw new NotFoundError("Reservation");
   }
 
   // Check permission
   const isOwner = reservation.customerId === userId;
   const isVendorOwner = (reservation.vendor as any)?.userId === userId;
 
-  if (!isOwner && !isVendorOwner && userRole !== 'ADMIN') {
-    throw new ForbiddenError('Not authorized to view this reservation');
+  if (!isOwner && !isVendorOwner && userRole !== "ADMIN") {
+    throw new ForbiddenError("Not authorized to view this reservation");
   }
 
   return reservation;
@@ -254,7 +278,7 @@ export async function updateReservationStatus(
   reservationId: string,
   userId: string,
   userRole: Role,
-  status: ReservationStatus
+  status: ReservationStatus,
 ): Promise<ReservationResponse> {
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
@@ -262,39 +286,39 @@ export async function updateReservationStatus(
   });
 
   if (!reservation) {
-    throw new NotFoundError('Reservation');
+    throw new NotFoundError("Reservation");
   }
 
   // Check permission - only vendor owner or admin can update status
   const isVendorOwner = reservation.vendor.userId === userId;
-  if (!isVendorOwner && userRole !== 'ADMIN') {
-    throw new ForbiddenError('Not authorized to update this reservation');
+  if (!isVendorOwner && userRole !== "ADMIN") {
+    throw new ForbiddenError("Not authorized to update this reservation");
   }
 
   // Admin can change status freely, vendor follows transition rules
-  if (userRole !== 'ADMIN') {
+  if (userRole !== "ADMIN") {
     // Validate status transition for non-admin
     const validTransitions: Record<ReservationStatus, ReservationStatus[]> = {
-      PENDING: ['CONFIRMED', 'CANCELLED'],
-      CONFIRMED: ['PREPARING', 'CANCELLED'],
-      PREPARING: ['READY', 'CANCELLED'],
-      READY: ['COMPLETED', 'CANCELLED'],
+      PENDING: ["CONFIRMED", "CANCELLED"],
+      CONFIRMED: ["PREPARING", "CANCELLED"],
+      PREPARING: ["READY", "CANCELLED"],
+      READY: ["COMPLETED", "CANCELLED"],
       COMPLETED: [],
       CANCELLED: [],
     };
 
     if (!validTransitions[reservation.status].includes(status)) {
       throw new BadRequestError(
-        `Cannot change status from ${reservation.status} to ${status}`
+        `Cannot change status from ${reservation.status} to ${status}`,
       );
     }
   }
 
   const updateData: any = { status };
 
-  if (status === 'CONFIRMED') {
+  if (status === "CONFIRMED") {
     updateData.confirmedAt = new Date();
-  } else if (status === 'COMPLETED') {
+  } else if (status === "COMPLETED") {
     updateData.completedAt = new Date();
   }
 
@@ -333,7 +357,7 @@ export async function updateReservationStatus(
   if (updated.customer?.email) {
     const orderDetails = {
       queueNumber: updated.queueNumber,
-      vendorName: updated.vendor?.name || 'ร้านค้า',
+      vendorName: updated.vendor?.name || "ร้านค้า",
       customerName: updated.customer.name,
       items: updated.items.map((item) => ({
         name: item.name,
@@ -341,34 +365,66 @@ export async function updateReservationStatus(
         price: item.price,
       })),
       totalAmount: updated.totalAmount,
-      timeSlot: updated.timeSlot ? `${updated.timeSlot.startTime} - ${updated.timeSlot.endTime}` : undefined,
+      timeSlot: updated.timeSlot
+        ? `${updated.timeSlot.startTime} - ${updated.timeSlot.endTime}`
+        : undefined,
     };
 
     // Send notification email (fire and forget - don't block response)
     (async () => {
       try {
         switch (status) {
-          case 'CONFIRMED':
-            await sendOrderConfirmedEmail(updated.customer!.email, orderDetails);
+          case "CONFIRMED":
+            await sendOrderConfirmedEmail(
+              updated.customer!.email,
+              orderDetails,
+            );
             break;
-          case 'PREPARING':
-            await sendOrderPreparingEmail(updated.customer!.email, orderDetails);
+          case "PREPARING":
+            await sendOrderPreparingEmail(
+              updated.customer!.email,
+              orderDetails,
+            );
             break;
-          case 'READY':
+          case "READY":
             await sendOrderReadyEmail(updated.customer!.email, orderDetails);
             break;
-          case 'COMPLETED':
-            await sendOrderCompletedEmail(updated.customer!.email, orderDetails);
+          case "COMPLETED":
+            await sendOrderCompletedEmail(
+              updated.customer!.email,
+              orderDetails,
+            );
             break;
-          case 'CANCELLED':
-            await sendOrderCancelledEmail(updated.customer!.email, orderDetails);
+          case "CANCELLED":
+            await sendOrderCancelledEmail(
+              updated.customer!.email,
+              orderDetails,
+            );
             break;
         }
-        console.log(`[Reservation] Status notification sent for order #${updated.queueNumber} (${status})`);
+        console.log(
+          `[Reservation] Status notification sent for order #${updated.queueNumber} (${status})`,
+        );
       } catch (error) {
-        console.error(`[Reservation] Failed to send status notification:`, error);
+        console.error(
+          `[Reservation] Failed to send status notification:`,
+          error,
+        );
       }
     })();
+  }
+
+  // Send push notification (fire and forget - don't block response)
+  if (updated.customer?.id) {
+    sendReservationStatusNotification(
+      updated.customer.id,
+      status,
+      updated.queueNumber,
+      updated.vendor?.name || "ร้านค้า",
+      updated.id,
+    ).catch((error) => {
+      console.error(`[Push] Failed to send push notification:`, error);
+    });
   }
 
   return updated;
@@ -380,7 +436,7 @@ export async function updateReservationStatus(
 export async function cancelReservation(
   reservationId: string,
   userId: string,
-  userRole: Role
+  userRole: Role,
 ): Promise<ReservationResponse> {
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
@@ -388,27 +444,27 @@ export async function cancelReservation(
   });
 
   if (!reservation) {
-    throw new NotFoundError('Reservation');
+    throw new NotFoundError("Reservation");
   }
 
   // Check permission - customer, vendor owner, or admin
   const isOwner = reservation.customerId === userId;
   const isVendorOwner = reservation.vendor.userId === userId;
 
-  if (!isOwner && !isVendorOwner && userRole !== 'ADMIN') {
-    throw new ForbiddenError('Not authorized to cancel this reservation');
+  if (!isOwner && !isVendorOwner && userRole !== "ADMIN") {
+    throw new ForbiddenError("Not authorized to cancel this reservation");
   }
 
   // Can only cancel pending or confirmed reservations
-  if (!['PENDING', 'CONFIRMED'].includes(reservation.status)) {
+  if (!["PENDING", "CONFIRMED"].includes(reservation.status)) {
     throw new BadRequestError(
-      'Can only cancel pending or confirmed reservations'
+      "Can only cancel pending or confirmed reservations",
     );
   }
 
   const updated = await prisma.reservation.update({
     where: { id: reservationId },
-    data: { status: 'CANCELLED' },
+    data: { status: "CANCELLED" },
     include: {
       items: true,
       vendor: {
@@ -441,7 +497,7 @@ export async function cancelReservation(
   if (updated.customer?.email) {
     const orderDetails = {
       queueNumber: updated.queueNumber,
-      vendorName: updated.vendor?.name || 'ร้านค้า',
+      vendorName: updated.vendor?.name || "ร้านค้า",
       customerName: updated.customer.name,
       items: updated.items.map((item) => ({
         name: item.name,
@@ -452,9 +508,14 @@ export async function cancelReservation(
     };
 
     // Fire and forget
-    sendOrderCancelledEmail(updated.customer.email, orderDetails).catch((error) => {
-      console.error(`[Reservation] Failed to send cancellation email:`, error);
-    });
+    sendOrderCancelledEmail(updated.customer.email, orderDetails).catch(
+      (error) => {
+        console.error(
+          `[Reservation] Failed to send cancellation email:`,
+          error,
+        );
+      },
+    );
   }
 
   return updated;
@@ -468,7 +529,7 @@ export async function getCustomerReservations(
   pagination: PaginationInput,
   filters?: {
     status?: ReservationStatus;
-  }
+  },
 ) {
   const { page, limit, skip } = parsePagination(pagination);
 
@@ -500,7 +561,7 @@ export async function getCustomerReservations(
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       skip,
       take: limit,
     }),
@@ -524,7 +585,7 @@ export async function getVendorReservations(
   filters?: {
     status?: ReservationStatus;
     date?: string; // YYYY-MM-DD
-  }
+  },
 ) {
   // Verify vendor access
   const vendor = await prisma.vendor.findUnique({
@@ -532,11 +593,11 @@ export async function getVendorReservations(
   });
 
   if (!vendor) {
-    throw new NotFoundError('Vendor');
+    throw new NotFoundError("Vendor");
   }
 
-  if (vendor.userId !== userId && userRole !== 'ADMIN') {
-    throw new ForbiddenError('Not authorized to view these reservations');
+  if (vendor.userId !== userId && userRole !== "ADMIN") {
+    throw new ForbiddenError("Not authorized to view these reservations");
   }
 
   const { page, limit, skip } = parsePagination(pagination);
@@ -581,7 +642,7 @@ export async function getVendorReservations(
           },
         },
       },
-      orderBy: [{ status: 'asc' }, { queueNumber: 'asc' }],
+      orderBy: [{ status: "asc" }, { queueNumber: "asc" }],
       skip,
       take: limit,
     }),
@@ -603,7 +664,7 @@ export async function getAllReservations(
     status?: ReservationStatus;
     vendorId?: string;
     date?: string;
-  }
+  },
 ) {
   const { page, limit, skip } = parsePagination(pagination);
 
@@ -658,7 +719,7 @@ export async function getAllReservations(
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       skip,
       take: limit,
     }),
@@ -680,27 +741,36 @@ export async function getReservationStats(vendorId?: string) {
 
   const where: any = vendorId ? { vendorId } : {};
 
-  const [total, pending, confirmed, preparing, ready, completed, cancelled, todayCount, todayRevenue] =
-    await Promise.all([
-      prisma.reservation.count({ where }),
-      prisma.reservation.count({ where: { ...where, status: 'PENDING' } }),
-      prisma.reservation.count({ where: { ...where, status: 'CONFIRMED' } }),
-      prisma.reservation.count({ where: { ...where, status: 'PREPARING' } }),
-      prisma.reservation.count({ where: { ...where, status: 'READY' } }),
-      prisma.reservation.count({ where: { ...where, status: 'COMPLETED' } }),
-      prisma.reservation.count({ where: { ...where, status: 'CANCELLED' } }),
-      prisma.reservation.count({
-        where: { ...where, createdAt: { gte: today } },
-      }),
-      prisma.reservation.aggregate({
-        where: {
-          ...where,
-          status: 'COMPLETED',
-          createdAt: { gte: today },
-        },
-        _sum: { totalAmount: true },
-      }),
-    ]);
+  const [
+    total,
+    pending,
+    confirmed,
+    preparing,
+    ready,
+    completed,
+    cancelled,
+    todayCount,
+    todayRevenue,
+  ] = await Promise.all([
+    prisma.reservation.count({ where }),
+    prisma.reservation.count({ where: { ...where, status: "PENDING" } }),
+    prisma.reservation.count({ where: { ...where, status: "CONFIRMED" } }),
+    prisma.reservation.count({ where: { ...where, status: "PREPARING" } }),
+    prisma.reservation.count({ where: { ...where, status: "READY" } }),
+    prisma.reservation.count({ where: { ...where, status: "COMPLETED" } }),
+    prisma.reservation.count({ where: { ...where, status: "CANCELLED" } }),
+    prisma.reservation.count({
+      where: { ...where, createdAt: { gte: today } },
+    }),
+    prisma.reservation.aggregate({
+      where: {
+        ...where,
+        status: "COMPLETED",
+        createdAt: { gte: today },
+      },
+      _sum: { totalAmount: true },
+    }),
+  ]);
 
   return {
     total,

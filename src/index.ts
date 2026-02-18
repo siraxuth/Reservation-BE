@@ -26,6 +26,7 @@ import {
   reviewController,
   vendorReviewsController,
 } from "./controllers/review.controller";
+import { notificationController } from "./controllers/notification.controller";
 import {
   formatErrorResponse,
   getErrorStatusCode,
@@ -97,7 +98,7 @@ const app = new Elysia()
         "X-Requested-With",
       ],
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    })
+    }),
   )
 
   // logging
@@ -145,6 +146,7 @@ const app = new Elysia()
       .use(uploadController)
       .use(reviewController)
       .use(vendorReviewsController)
+      .use(notificationController),
   )
 
   // 404 handler
@@ -162,7 +164,7 @@ const app = new Elysia()
       detail: {
         hide: true,
       },
-    }
+    },
   );
 
 // Use Bun.serve with Elysia's fetch handler
