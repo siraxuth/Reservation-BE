@@ -5,6 +5,10 @@ import {
   sendNewReservationNotification,
 } from "./push.service";
 import {
+  notifyReservationStatusChange,
+  notifyNewReservation,
+} from "./notification.service";
+import {
   NotFoundError,
   ForbiddenError,
   BadRequestError,
@@ -211,6 +215,20 @@ export async function createReservation(
       reservation.id,
     ).catch((error: unknown) => {
       console.error(`[Push] Failed to notify vendor:`, error);
+    });
+
+    // Create in-app notification for vendor (always works)
+    notifyNewReservation({
+      vendorUserId: vendor.userId,
+      reservationId: reservation.id,
+      queueNumber: reservation.queueNumber,
+      customerName: reservation.customerName,
+      totalAmount: reservation.totalAmount,
+    }).catch((error: unknown) => {
+      console.error(
+        `[Notification] Failed to create vendor notification:`,
+        error,
+      );
     });
   }
 
@@ -424,6 +442,22 @@ export async function updateReservationStatus(
       updated.id,
     ).catch((error) => {
       console.error(`[Push] Failed to send push notification:`, error);
+    });
+  }
+
+  // Create in-app notification (polling-based, always works)
+  if (updated.customer?.id) {
+    notifyReservationStatusChange({
+      customerId: updated.customer.id,
+      reservationId: updated.id,
+      queueNumber: updated.queueNumber,
+      vendorName: updated.vendor?.name || "ร้านค้า",
+      newStatus: status,
+    }).catch((error: unknown) => {
+      console.error(
+        `[Notification] Failed to create in-app notification:`,
+        error,
+      );
     });
   }
 

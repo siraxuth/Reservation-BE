@@ -27,6 +27,7 @@ import {
   vendorReviewsController,
 } from "./controllers/review.controller";
 import { notificationController } from "./controllers/notification.controller";
+import { cleanupOldNotifications } from "./services/notification.service";
 import {
   formatErrorResponse,
   getErrorStatusCode,
@@ -188,5 +189,20 @@ const app = new Elysia()
 // ║                                                            ║
 // ╚════════════════════════════════════════════════════════════╝
 // `);
+
+// Auto-cleanup old notifications every hour
+setInterval(
+  () => {
+    cleanupOldNotifications().catch((err) =>
+      console.error("[Cleanup] Notification cleanup failed:", err),
+    );
+  },
+  60 * 60 * 1000,
+); // Every 1 hour
+
+// Run once on startup too (after 30s delay to let DB connect)
+setTimeout(() => {
+  cleanupOldNotifications().catch(() => {});
+}, 30_000);
 
 export default app;

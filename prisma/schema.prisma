@@ -92,6 +92,7 @@ model User {
   logs          AuditLog[]
   uploads       Upload[]
   pushSubscriptions PushSubscription[]
+  notifications     Notification[]
 
   @@index([email])
   @@index([role])
@@ -369,6 +370,26 @@ model PaymentMethod {
   isActive    Boolean     @default(true)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+}
+
+// ===========================================
+// In-App Notifications (Polling-based)
+// ===========================================
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  type      String   // reservation_status, new_reservation, system
+  data      Json?    // Extra data like reservationId, status, etc.
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
 }
 
 // ===========================================
