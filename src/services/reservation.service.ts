@@ -767,6 +767,178 @@ export async function getAllReservations(
 }
 
 /**
+ * Get queue status for a customer
+ * Returns active reservations with queue position info and vendor progress
+ */
+export async function getQueueStatus(customerId: string) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Get customer's active reservations (today, not completed/cancelled)
+  const activeReservations = await prisma.reservation.findMany({
+    where: {
+      customerId,
+      createdAt: { gte: today },
+      status: { in: ["PENDING", "CONFIRMED", "PREPARING", "READY"] },
+    },
+    include: {
+      items: true,
+      vendor: {
+        select: {
+          id: true,
+          name: true,
+          image: true,
+          isOpen: true,
+        },
+      },
+      timeSlot: {
+        select: {
+          id: true,
+          label: true,
+          startTime: true,
+          endTime: true,
+          period: true,
+        },
+      },
+    },
+    orderBy: { queueNumber: "asc" },
+  });
+
+  if (activeReservations.length === 0) {
+    return { reservations: [], vendors: [] };
+  }
+
+  // Get unique vendor IDs
+  const vendorIds = [...new Set(activeReservations.map((r) => r.vendorId))];
+
+  // For each vendor, get queue progress
+  const vendorQueues = await Promise.all(
+    vendorIds.map(async (vendorId) => {
+      // Currently preparing orders (vendor is working on these)
+      const preparingOrders = await prisma.reservation.findMany({
+        where: {
+          vendorId,
+          createdAt: { gte: today },
+          status: "PREPARING",
+        },
+        orderBy: { queueNumber: "asc" },
+        select: {
+          id: true,
+          queueNumber: true,
+          status: true,
+          customerName: true,
+        },
+      });
+
+      // Ready orders (done, waiting for pickup)
+      const readyOrders = await prisma.reservation.findMany({
+        where: {
+          vendorId,
+          createdAt: { gte: today },
+          status: "READY",
+        },
+        orderBy: { queueNumber: "asc" },
+        select: {
+          id: true,
+          queueNumber: true,
+          status: true,
+        },
+      });
+
+      // Count of orders ahead in queue (PENDING + CONFIRMED before customer's queue)
+      const waitingOrders = await prisma.reservation.findMany({
+        where: {
+          vendorId,
+          createdAt: { gte: today },
+          status: { in: ["PENDING", "CONFIRMED", "PREPARING"] },
+        },
+        orderBy: { queueNumber: "asc" },
+        select: {
+          id: true,
+          queueNumber: true,
+          status: true,
+        },
+      });
+
+      // Completed count today
+      const completedToday = await prisma.reservation.count({
+        where: {
+          vendorId,
+          createdAt: { gte: today },
+          status: "COMPLETED",
+        },
+      });
+
+      // Total orders today
+      const totalToday = await prisma.reservation.count({
+        where: {
+          vendorId,
+          createdAt: { gte: today },
+          status: { not: "CANCELLED" },
+        },
+      });
+
+      const vendor = activeReservations.find(
+        (r) => r.vendorId === vendorId,
+      )?.vendor;
+
+      return {
+        vendorId,
+        vendorName: vendor?.name || "",
+        vendorImage: vendor?.image || null,
+        isOpen: vendor?.isOpen ?? true,
+        currentlyPreparing: preparingOrders.map((o) => ({
+          queueNumber: o.queueNumber,
+          customerName: o.customerName,
+        })),
+        readyForPickup: readyOrders.map((o) => o.queueNumber),
+        waitingQueue: waitingOrders.map((o) => ({
+          queueNumber: o.queueNumber,
+          status: o.status,
+        })),
+        completedToday,
+        totalToday,
+      };
+    }),
+  );
+
+  // Build response with queue position for each reservation
+  const reservationsWithPosition = activeReservations.map((reservation) => {
+    const vendorQueue = vendorQueues.find(
+      (vq) => vq.vendorId === reservation.vendorId,
+    );
+    const aheadCount = vendorQueue
+      ? vendorQueue.waitingQueue.filter(
+          (w) => w.queueNumber < reservation.queueNumber,
+        ).length
+      : 0;
+
+    return {
+      id: reservation.id,
+      vendorId: reservation.vendorId,
+      vendorName: reservation.vendor?.name || "",
+      vendorImage: reservation.vendor?.image || null,
+      queueNumber: reservation.queueNumber,
+      status: reservation.status,
+      totalAmount: reservation.totalAmount,
+      items: reservation.items.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+      })),
+      timeSlot: reservation.timeSlot,
+      createdAt: reservation.createdAt,
+      aheadCount,
+    };
+  });
+
+  return {
+    reservations: reservationsWithPosition,
+    vendors: vendorQueues,
+  };
+}
+
+/**
  * Get reservation statistics
  */
 export async function getReservationStats(vendorId?: string) {
