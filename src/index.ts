@@ -39,7 +39,7 @@ const NODE_ENV = process.env.NODE_ENV || "development";
 const ALLOWED_ORIGINS = [
   // Production
   "https://is.reservation.siraxuth.xyz",
-  "https://reservation.siraxuth.xyz",
+  "https://reservation.dekgp.com",
   // Development
   "http://localhost:3000",
   "http://localhost:3001",
