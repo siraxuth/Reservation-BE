@@ -1,64 +1,64 @@
 // Vendor Controller
-import { Elysia, t } from 'elysia';
-import * as vendorService from '../services/vendor.service';
-import { validateSession, type AuthUser } from '../services/auth.service';
+import { Elysia, t } from "elysia";
+import * as vendorService from "../services/vendor.service";
+import { validateSession, type AuthUser } from "../services/auth.service";
 import {
   authPlugin,
   requireAuth,
   requireVendorOrAdmin,
   requireAdmin,
-} from '../middlewares/auth.middleware';
-import { success, paginated } from '../utils/response';
+} from "../middlewares/auth.middleware";
+import { success, paginated } from "../utils/response";
 import {
   createVendorSchema,
   updateVendorSchema,
   paginationSchema,
-} from '../utils/validation';
-import { BadRequestError, UnauthorizedError } from '../utils/errors';
+} from "../utils/validation";
+import { BadRequestError, UnauthorizedError } from "../utils/errors";
 
 // Helper function to extract and validate auth
 async function getAuthUser(request: Request): Promise<AuthUser> {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    throw new UnauthorizedError('Authentication required');
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    throw new UnauthorizedError("Authentication required");
   }
 
   const token = authHeader.slice(7);
   const user = await validateSession(token);
 
   if (!user) {
-    throw new UnauthorizedError('Invalid or expired session');
+    throw new UnauthorizedError("Invalid or expired session");
   }
 
   return user;
 }
 
-export const vendorController = new Elysia({ prefix: '/vendors' })
+export const vendorController = new Elysia({ prefix: "/vendors" })
   // Public routes
   .use(authPlugin)
 
   // Get all vendors (public)
   .get(
-    '/',
+    "/",
     async ({ query }) => {
-    const paginationResult = paginationSchema.safeParse(query);
+      const paginationResult = paginationSchema.safeParse(query);
 
-    const pagination = paginationResult.success
-      ? paginationResult.data
-      : { page: 1, limit: 10 };
+      const pagination = paginationResult.success
+        ? paginationResult.data
+        : { page: 1, limit: 10 };
 
-    const result = await vendorService.getAllVendors(pagination, {
-      isOpen:
-        query.isOpen === "true"
-          ? true
-          : query.isOpen === "false"
-          ? false
-          : undefined,
-      category: query.category,
-      search: query.search,
-    });
+      const result = await vendorService.getAllVendors(pagination, {
+        isOpen:
+          query.isOpen === "true"
+            ? true
+            : query.isOpen === "false"
+              ? false
+              : undefined,
+        category: query.category,
+        search: query.search,
+      });
 
-    return paginated(result);
+      return paginated(result);
     },
     {
       query: t.Object({
@@ -69,32 +69,32 @@ export const vendorController = new Elysia({ prefix: '/vendors' })
         search: t.Optional(t.String()),
       }),
       detail: {
-        tags: ['Vendors'],
-        summary: 'List all vendors',
-        description: 'Get all vendors with optional filters',
+        tags: ["Vendors"],
+        summary: "List all vendors",
+        description: "Get all vendors with optional filters",
       },
-    }
+    },
   )
 
   // Get all categories
   .get(
-    '/categories',
+    "/categories",
     async () => {
       const categories = await vendorService.getAllCategories();
       return success(categories);
     },
     {
       detail: {
-        tags: ['Vendors'],
-        summary: 'Get all categories',
-        description: 'Get list of all vendor categories',
+        tags: ["Vendors"],
+        summary: "Get all categories",
+        description: "Get list of all vendor categories",
       },
-    }
+    },
   )
 
   // Get vendor by ID (public)
   .get(
-    '/:vendorId',
+    "/:vendorId",
     async ({ params }) => {
       const vendor = await vendorService.getVendorById(params.vendorId);
       return success(vendor);
@@ -104,11 +104,11 @@ export const vendorController = new Elysia({ prefix: '/vendors' })
         vendorId: t.String(),
       }),
       detail: {
-        tags: ['Vendors'],
-        summary: 'Get vendor by ID',
-        description: 'Get vendor details',
+        tags: ["Vendors"],
+        summary: "Get vendor by ID",
+        description: "Get vendor details",
       },
-    }
+    },
   )
 
   // Protected routes
@@ -116,7 +116,7 @@ export const vendorController = new Elysia({ prefix: '/vendors' })
 
   // Get my vendor profile
   .get(
-    '/me/profile',
+    "/me/profile",
     async ({ request }) => {
       const user = await getAuthUser(request);
       const vendor = await vendorService.getVendorByUserId(user.id);
@@ -124,16 +124,16 @@ export const vendorController = new Elysia({ prefix: '/vendors' })
     },
     {
       detail: {
-        tags: ['Vendors'],
-        summary: 'Get my vendor profile',
-        description: 'Get current user vendor profile',
+        tags: ["Vendors"],
+        summary: "Get my vendor profile",
+        description: "Get current user vendor profile",
       },
-    }
+    },
   )
 
   // Create vendor (become a vendor)
   .post(
-    '/',
+    "/",
     async ({ request, body }) => {
       const user = await getAuthUser(request);
       const validated = createVendorSchema.safeParse(body);
@@ -142,20 +142,21 @@ export const vendorController = new Elysia({ prefix: '/vendors' })
       }
 
       const vendor = await vendorService.createVendor(user.id, validated.data);
-      return success(vendor, 'Vendor profile created');
+      return success(vendor, "Vendor profile created");
     },
     {
       body: t.Object({
         name: t.String(),
         description: t.Optional(t.String()),
+        image: t.Optional(t.String()),
         categories: t.Optional(t.Array(t.String())),
       }),
       detail: {
-        tags: ['Vendors'],
-        summary: 'Create vendor',
-        description: 'Create a vendor profile (become a vendor)',
+        tags: ["Vendors"],
+        summary: "Create vendor",
+        description: "Create a vendor profile (become a vendor)",
       },
-    }
+    },
   )
 
   // Vendor/Admin routes
@@ -163,7 +164,7 @@ export const vendorController = new Elysia({ prefix: '/vendors' })
 
   // Update vendor
   .patch(
-    '/:vendorId',
+    "/:vendorId",
     async ({ request, params, body }) => {
       const user = await getAuthUser(request);
       const validated = updateVendorSchema.safeParse(body);
@@ -175,9 +176,9 @@ export const vendorController = new Elysia({ prefix: '/vendors' })
         params.vendorId,
         user.id,
         user.role,
-        validated.data
+        validated.data,
       );
-      return success(vendor, 'Vendor updated');
+      return success(vendor, "Vendor updated");
     },
     {
       params: t.Object({
@@ -191,40 +192,43 @@ export const vendorController = new Elysia({ prefix: '/vendors' })
         categories: t.Optional(t.Array(t.String())),
       }),
       detail: {
-        tags: ['Vendors'],
-        summary: 'Update vendor',
-        description: 'Update vendor details',
+        tags: ["Vendors"],
+        summary: "Update vendor",
+        description: "Update vendor details",
       },
-    }
+    },
   )
 
   // Toggle vendor status
   .post(
-    '/:vendorId/toggle-status',
+    "/:vendorId/toggle-status",
     async ({ request, params }) => {
       const user = await getAuthUser(request);
       const vendor = await vendorService.toggleVendorStatus(
         params.vendorId,
         user.id,
-        user.role
+        user.role,
       );
-      return success(vendor, `Shop is now ${vendor.isOpen ? 'open' : 'closed'}`);
+      return success(
+        vendor,
+        `Shop is now ${vendor.isOpen ? "open" : "closed"}`,
+      );
     },
     {
       params: t.Object({
         vendorId: t.String(),
       }),
       detail: {
-        tags: ['Vendors'],
-        summary: 'Toggle vendor status',
-        description: 'Open/close vendor shop',
+        tags: ["Vendors"],
+        summary: "Toggle vendor status",
+        description: "Open/close vendor shop",
       },
-    }
+    },
   )
 
   // Get vendor statistics
   .get(
-    '/:vendorId/stats',
+    "/:vendorId/stats",
     async ({ params }) => {
       const stats = await vendorService.getVendorStats(params.vendorId);
       return success(stats);
@@ -234,11 +238,11 @@ export const vendorController = new Elysia({ prefix: '/vendors' })
         vendorId: t.String(),
       }),
       detail: {
-        tags: ['Vendors'],
-        summary: 'Get vendor stats',
-        description: 'Get vendor statistics',
+        tags: ["Vendors"],
+        summary: "Get vendor stats",
+        description: "Get vendor statistics",
       },
-    }
+    },
   )
 
   // Admin routes
@@ -246,19 +250,19 @@ export const vendorController = new Elysia({ prefix: '/vendors' })
 
   // Delete vendor (admin)
   .delete(
-    '/:vendorId',
+    "/:vendorId",
     async ({ params }) => {
       await vendorService.deleteVendor(params.vendorId);
-      return success(null, 'Vendor deleted');
+      return success(null, "Vendor deleted");
     },
     {
       params: t.Object({
         vendorId: t.String(),
       }),
       detail: {
-        tags: ['Vendors'],
-        summary: 'Delete vendor',
-        description: 'Delete vendor (admin only)',
+        tags: ["Vendors"],
+        summary: "Delete vendor",
+        description: "Delete vendor (admin only)",
       },
-    }
+    },
   );

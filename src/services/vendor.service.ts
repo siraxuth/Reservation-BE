@@ -1,13 +1,13 @@
 // Vendor Service
-import { prisma } from '../config/database';
-import { NotFoundError, ForbiddenError, ConflictError } from '../utils/errors';
-import { parsePagination, createPaginationMeta } from '../utils/response';
+import { prisma } from "../config/database";
+import { NotFoundError, ForbiddenError, ConflictError } from "../utils/errors";
+import { parsePagination, createPaginationMeta } from "../utils/response";
 import type {
   CreateVendorInput,
   UpdateVendorInput,
   PaginationInput,
-} from '../utils/validation';
-import type { Role } from '@prisma/client';
+} from "../utils/validation";
+import type { Role } from "@prisma/client";
 
 export interface VendorResponse {
   id: string;
@@ -34,7 +34,7 @@ export interface VendorResponse {
  */
 export async function createVendor(
   userId: string,
-  input: CreateVendorInput
+  input: CreateVendorInput,
 ): Promise<VendorResponse> {
   // Check if user already has a vendor
   const existingVendor = await prisma.vendor.findUnique({
@@ -42,7 +42,7 @@ export async function createVendor(
   });
 
   if (existingVendor) {
-    throw new ConflictError('User already has a vendor profile');
+    throw new ConflictError("User already has a vendor profile");
   }
 
   // Create vendor and update user role
@@ -52,6 +52,7 @@ export async function createVendor(
         userId,
         name: input.name,
         description: input.description,
+        image: input.image,
         categories: input.categories,
       },
       include: {
@@ -67,7 +68,7 @@ export async function createVendor(
     }),
     prisma.user.update({
       where: { id: userId },
-      data: { role: 'VENDOR' },
+      data: { role: "VENDOR" },
     }),
   ]);
 
@@ -93,7 +94,7 @@ export async function getVendorById(vendorId: string): Promise<VendorResponse> {
   });
 
   if (!vendor) {
-    throw new NotFoundError('Vendor');
+    throw new NotFoundError("Vendor");
   }
 
   return vendor;
@@ -102,7 +103,9 @@ export async function getVendorById(vendorId: string): Promise<VendorResponse> {
 /**
  * Get vendor by user ID
  */
-export async function getVendorByUserId(userId: string): Promise<VendorResponse> {
+export async function getVendorByUserId(
+  userId: string,
+): Promise<VendorResponse> {
   const vendor = await prisma.vendor.findUnique({
     where: { userId },
     include: {
@@ -118,7 +121,7 @@ export async function getVendorByUserId(userId: string): Promise<VendorResponse>
   });
 
   if (!vendor) {
-    throw new NotFoundError('Vendor');
+    throw new NotFoundError("Vendor");
   }
 
   return vendor;
@@ -131,19 +134,19 @@ export async function updateVendor(
   vendorId: string,
   userId: string,
   userRole: Role,
-  input: UpdateVendorInput
+  input: UpdateVendorInput,
 ): Promise<VendorResponse> {
   const vendor = await prisma.vendor.findUnique({
     where: { id: vendorId },
   });
 
   if (!vendor) {
-    throw new NotFoundError('Vendor');
+    throw new NotFoundError("Vendor");
   }
 
   // Check permission - vendor owner or admin
-  if (vendor.userId !== userId && userRole !== 'ADMIN') {
-    throw new ForbiddenError('Not authorized to update this vendor');
+  if (vendor.userId !== userId && userRole !== "ADMIN") {
+    throw new ForbiddenError("Not authorized to update this vendor");
   }
 
   const updated = await prisma.vendor.update({
@@ -179,7 +182,7 @@ export async function getAllVendors(
     isOpen?: boolean;
     category?: string;
     search?: string;
-  }
+  },
 ) {
   const { page, limit, skip } = parsePagination(pagination);
 
@@ -195,8 +198,8 @@ export async function getAllVendors(
 
   if (filters?.search) {
     where.OR = [
-      { name: { contains: filters.search, mode: 'insensitive' } },
-      { description: { contains: filters.search, mode: 'insensitive' } },
+      { name: { contains: filters.search, mode: "insensitive" } },
+      { description: { contains: filters.search, mode: "insensitive" } },
     ];
   }
 
@@ -213,7 +216,7 @@ export async function getAllVendors(
           },
         },
       },
-      orderBy: [{ rating: 'desc' }, { totalOrders: 'desc' }],
+      orderBy: [{ rating: "desc" }, { totalOrders: "desc" }],
       skip,
       take: limit,
     }),
@@ -232,18 +235,18 @@ export async function getAllVendors(
 export async function toggleVendorStatus(
   vendorId: string,
   userId: string,
-  userRole: Role
+  userRole: Role,
 ): Promise<VendorResponse> {
   const vendor = await prisma.vendor.findUnique({
     where: { id: vendorId },
   });
 
   if (!vendor) {
-    throw new NotFoundError('Vendor');
+    throw new NotFoundError("Vendor");
   }
 
-  if (vendor.userId !== userId && userRole !== 'ADMIN') {
-    throw new ForbiddenError('Not authorized to update this vendor');
+  if (vendor.userId !== userId && userRole !== "ADMIN") {
+    throw new ForbiddenError("Not authorized to update this vendor");
   }
 
   const updated = await prisma.vendor.update({
@@ -273,14 +276,14 @@ export async function deleteVendor(vendorId: string): Promise<void> {
   });
 
   if (!vendor) {
-    throw new NotFoundError('Vendor');
+    throw new NotFoundError("Vendor");
   }
 
   await prisma.$transaction([
     prisma.vendor.delete({ where: { id: vendorId } }),
     prisma.user.update({
       where: { id: vendor.userId },
-      data: { role: 'CUSTOMER' },
+      data: { role: "CUSTOMER" },
     }),
   ]);
 }
@@ -311,12 +314,12 @@ export async function getVendorStats(vendorId: string) {
   });
 
   if (!vendor) {
-    throw new NotFoundError('Vendor');
+    throw new NotFoundError("Vendor");
   }
 
   const todayReservations = vendor.reservations;
   const todayRevenue = todayReservations
-    .filter((r) => r.status === 'COMPLETED')
+    .filter((r) => r.status === "COMPLETED")
     .reduce((sum, r) => sum + r.totalAmount, 0);
 
   return {
@@ -328,9 +331,11 @@ export async function getVendorStats(vendorId: string) {
     today: {
       reservations: todayReservations.length,
       revenue: todayRevenue,
-      pending: todayReservations.filter((r) => r.status === 'PENDING').length,
-      preparing: todayReservations.filter((r) => r.status === 'PREPARING').length,
-      completed: todayReservations.filter((r) => r.status === 'COMPLETED').length,
+      pending: todayReservations.filter((r) => r.status === "PENDING").length,
+      preparing: todayReservations.filter((r) => r.status === "PREPARING")
+        .length,
+      completed: todayReservations.filter((r) => r.status === "COMPLETED")
+        .length,
     },
   };
 }
