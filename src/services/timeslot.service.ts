@@ -1,8 +1,8 @@
 // Time Slot Service
-import { prisma } from '../config/database';
-import { NotFoundError, ForbiddenError } from '../utils/errors';
-import type { CreateTimeSlotInput } from '../utils/validation';
-import type { Role, Period } from '@prisma/client';
+import { prisma } from "../config/database";
+import { NotFoundError, ForbiddenError } from "../utils/errors";
+import type { CreateTimeSlotInput } from "../utils/validation";
+import type { Role, Period } from "@prisma/client";
 
 export interface TimeSlotResponse {
   id: string;
@@ -24,7 +24,7 @@ export async function createTimeSlot(
   vendorId: string | null,
   userId: string,
   userRole: Role,
-  input: CreateTimeSlotInput
+  input: CreateTimeSlotInput,
 ): Promise<TimeSlotResponse> {
   // If vendorId is provided, verify permission
   if (vendorId) {
@@ -33,14 +33,16 @@ export async function createTimeSlot(
     });
 
     if (!vendor) {
-      throw new NotFoundError('Vendor');
+      throw new NotFoundError("Vendor");
     }
 
-    if (vendor.userId !== userId && userRole !== 'ADMIN') {
-      throw new ForbiddenError('Not authorized to create time slots for this vendor');
+    if (vendor.userId !== userId && userRole !== "ADMIN") {
+      throw new ForbiddenError(
+        "Not authorized to create time slots for this vendor",
+      );
     }
-  } else if (userRole !== 'ADMIN') {
-    throw new ForbiddenError('Only admin can create global time slots');
+  } else if (userRole !== "ADMIN") {
+    throw new ForbiddenError("Only admin can create global time slots");
   }
 
   const timeSlot = await prisma.timeSlot.create({
@@ -60,7 +62,9 @@ export async function createTimeSlot(
 /**
  * Get time slots (global or vendor-specific)
  */
-export async function getTimeSlots(vendorId?: string): Promise<TimeSlotResponse[]> {
+export async function getTimeSlots(
+  vendorId?: string,
+): Promise<TimeSlotResponse[]> {
   const timeSlots = await prisma.timeSlot.findMany({
     where: {
       OR: [
@@ -69,7 +73,7 @@ export async function getTimeSlots(vendorId?: string): Promise<TimeSlotResponse[
       ],
       isActive: true,
     },
-    orderBy: [{ period: 'asc' }, { startTime: 'asc' }],
+    orderBy: [{ period: "asc" }, { startTime: "asc" }],
   });
 
   return timeSlots;
@@ -78,13 +82,15 @@ export async function getTimeSlots(vendorId?: string): Promise<TimeSlotResponse[
 /**
  * Get time slot by ID
  */
-export async function getTimeSlotById(timeSlotId: string): Promise<TimeSlotResponse> {
-  const timeSlot = await prisma.timeSlot.findUnique({
+export async function getTimeSlotById(
+  timeSlotId: string,
+): Promise<TimeSlotResponse> {
+  const timeSlot = await prisma.timeSlot.findFirst({
     where: { id: timeSlotId },
   });
 
   if (!timeSlot) {
-    throw new NotFoundError('Time slot');
+    throw new NotFoundError("Time slot");
   }
 
   return timeSlot;
@@ -97,27 +103,27 @@ export async function updateTimeSlot(
   timeSlotId: string,
   userId: string,
   userRole: Role,
-  input: Partial<CreateTimeSlotInput & { isActive: boolean }>
+  input: Partial<CreateTimeSlotInput & { isActive: boolean }>,
 ): Promise<TimeSlotResponse> {
-  const timeSlot = await prisma.timeSlot.findUnique({
+  const timeSlot = await prisma.timeSlot.findFirst({
     where: { id: timeSlotId },
     include: { vendor: true },
   });
 
   if (!timeSlot) {
-    throw new NotFoundError('Time slot');
+    throw new NotFoundError("Time slot");
   }
 
   // Check permission
   if (timeSlot.vendor) {
-    if (timeSlot.vendor.userId !== userId && userRole !== 'ADMIN') {
-      throw new ForbiddenError('Not authorized to update this time slot');
+    if (timeSlot.vendor.userId !== userId && userRole !== "ADMIN") {
+      throw new ForbiddenError("Not authorized to update this time slot");
     }
-  } else if (userRole !== 'ADMIN') {
-    throw new ForbiddenError('Only admin can update global time slots');
+  } else if (userRole !== "ADMIN") {
+    throw new ForbiddenError("Only admin can update global time slots");
   }
 
-  const updated = await prisma.timeSlot.update({
+  await prisma.timeSlot.updateMany({
     where: { id: timeSlotId },
     data: {
       label: input.label,
@@ -129,7 +135,13 @@ export async function updateTimeSlot(
     },
   });
 
-  return updated;
+  // Return updated record
+  const updated = await prisma.timeSlot.findFirst({
+    where: { id: timeSlotId },
+    include: { vendor: true },
+  });
+
+  return updated!;
 }
 
 /**
@@ -138,27 +150,27 @@ export async function updateTimeSlot(
 export async function deleteTimeSlot(
   timeSlotId: string,
   userId: string,
-  userRole: Role
+  userRole: Role,
 ): Promise<void> {
-  const timeSlot = await prisma.timeSlot.findUnique({
+  const timeSlot = await prisma.timeSlot.findFirst({
     where: { id: timeSlotId },
     include: { vendor: true },
   });
 
   if (!timeSlot) {
-    throw new NotFoundError('Time slot');
+    throw new NotFoundError("Time slot");
   }
 
   // Check permission
   if (timeSlot.vendor) {
-    if (timeSlot.vendor.userId !== userId && userRole !== 'ADMIN') {
-      throw new ForbiddenError('Not authorized to delete this time slot');
+    if (timeSlot.vendor.userId !== userId && userRole !== "ADMIN") {
+      throw new ForbiddenError("Not authorized to delete this time slot");
     }
-  } else if (userRole !== 'ADMIN') {
-    throw new ForbiddenError('Only admin can delete global time slots');
+  } else if (userRole !== "ADMIN") {
+    throw new ForbiddenError("Only admin can delete global time slots");
   }
 
-  await prisma.timeSlot.delete({ where: { id: timeSlotId } });
+  await prisma.timeSlot.deleteMany({ where: { id: timeSlotId } });
 }
 
 /**
@@ -166,8 +178,10 @@ export async function deleteTimeSlot(
  */
 export async function getAvailableTimeSlots(
   vendorId: string,
-  date: string
-): Promise<(TimeSlotResponse & { availableSlots: number; totalReservations: number })[]> {
+  date: string,
+): Promise<
+  (TimeSlotResponse & { availableSlots: number; totalReservations: number })[]
+> {
   const startDate = new Date(date);
   startDate.setHours(0, 0, 0, 0);
   const endDate = new Date(date);
@@ -187,12 +201,12 @@ export async function getAvailableTimeSlots(
             lte: endDate,
           },
           status: {
-            notIn: ['CANCELLED'],
+            notIn: ["CANCELLED"],
           },
         },
       },
     },
-    orderBy: [{ period: 'asc' }, { startTime: 'asc' }],
+    orderBy: [{ period: "asc" }, { startTime: "asc" }],
   });
 
   return timeSlots.map((slot) => ({
