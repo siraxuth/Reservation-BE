@@ -939,6 +939,75 @@ export async function getQueueStatus(customerId: string) {
 }
 
 /**
+ * Resend "ready" email notification to customer (vendor-triggered)
+ */
+export async function notifyCustomer(
+  reservationId: string,
+  userId: string,
+  userRole: Role,
+): Promise<{ sent: boolean; email: string }> {
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    include: {
+      items: true,
+      vendor: { select: { id: true, name: true, userId: true } },
+      customer: { select: { id: true, name: true, email: true } },
+      timeSlot: {
+        select: {
+          id: true,
+          label: true,
+          startTime: true,
+          endTime: true,
+          period: true,
+        },
+      },
+    },
+  });
+
+  if (!reservation) {
+    throw new NotFoundError("Reservation");
+  }
+
+  // Only vendor owner or admin
+  const isVendorOwner = reservation.vendor?.userId === userId;
+  if (!isVendorOwner && userRole !== "ADMIN") {
+    throw new ForbiddenError("Not authorized to notify for this reservation");
+  }
+
+  if (reservation.status !== "READY") {
+    throw new BadRequestError("Can only notify customer when status is READY");
+  }
+
+  const email = reservation.customer?.email;
+  if (!email) {
+    throw new BadRequestError("Customer email not found");
+  }
+
+  const orderDetails = {
+    queueNumber: reservation.queueNumber,
+    vendorName: reservation.vendor?.name || "ร้านค้า",
+    customerName: reservation.customer!.name,
+    items: reservation.items.map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+    })),
+    totalAmount: reservation.totalAmount,
+    timeSlot: reservation.timeSlot
+      ? `${reservation.timeSlot.startTime} - ${reservation.timeSlot.endTime}`
+      : undefined,
+  };
+
+  await sendOrderReadyEmail(email, orderDetails);
+
+  console.log(
+    `[Reservation] Vendor manually notified customer for order #${reservation.queueNumber} → ${email}`,
+  );
+
+  return { sent: true, email };
+}
+
+/**
  * Get reservation statistics
  */
 export async function getReservationStats(vendorId?: string) {

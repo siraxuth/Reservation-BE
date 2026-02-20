@@ -218,6 +218,30 @@ export const reservationController = new Elysia({ prefix: "/reservations" })
     },
   )
 
+  // Resend "ready" email to customer
+  .post(
+    "/:reservationId/notify",
+    async ({ request, params }) => {
+      const user = await getAuthUser(request);
+      const result = await reservationService.notifyCustomer(
+        params.reservationId,
+        user.id,
+        user.role,
+      );
+      return success(result, "ส่งการแจ้งเตือนถึงลูกค้าแล้ว");
+    },
+    {
+      params: t.Object({
+        reservationId: t.String(),
+      }),
+      detail: {
+        tags: ["Reservations"],
+        summary: "Notify customer",
+        description: "Resend ready email notification to customer",
+      },
+    },
+  )
+
   // Admin routes
   .use(requireAdmin)
 
